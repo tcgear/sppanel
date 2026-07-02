@@ -1,3 +1,6 @@
 aiohttp
 psutil
-pyinstaller
+grpcio
+protobuf
+PyYAML
+requests
