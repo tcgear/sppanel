@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import argparse
+import os
 import signal
 import subprocess
 import sys
@@ -10,14 +10,38 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 
+# Set these here or via environment variables. If any required value is empty,
+# main.py will not be started.
+SERVER = os.environ.get("SERVER", "")
+CLIENT_SECRET = os.environ.get("CLIENT_SECRET", "")
+UUID = os.environ.get("UUID", "")
+TLS = os.environ.get("TLS", "true")
 
-def start_process(name: str, args: list[str], quiet: bool = False) -> subprocess.Popen:
+
+def agent_enabled() -> bool:
+    return bool(SERVER.strip() and CLIENT_SECRET.strip() and UUID.strip())
+
+
+def agent_env() -> dict[str, str]:
+    env = os.environ.copy()
+    env.update(
+        {
+            "SERVER": SERVER,
+            "CLIENT_SECRET": CLIENT_SECRET,
+            "UUID": UUID,
+            "TLS": TLS,
+        }
+    )
+    return env
+
+
+def start_process(name: str, args: list[str], quiet: bool = False, env: dict[str, str] | None = None) -> subprocess.Popen:
     if quiet:
         log_path = Path("/tmp") / f"{name}.log"
         log_file = log_path.open("ab")
-        return subprocess.Popen(args, cwd=BASE_DIR, stdout=log_file, stderr=subprocess.STDOUT, start_new_session=True)
+        return subprocess.Popen(args, cwd=BASE_DIR, stdout=log_file, stderr=subprocess.STDOUT, start_new_session=True, env=env)
     print(f"Starting {name}: {' '.join(args)}", flush=True)
-    return subprocess.Popen(args, cwd=BASE_DIR)
+    return subprocess.Popen(args, cwd=BASE_DIR, env=env)
 
 
 def terminate_process(name: str, process: subprocess.Popen) -> None:
@@ -34,13 +58,15 @@ def terminate_process(name: str, process: subprocess.Popen) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run app.py and python-nezha-agent together")
-    parser.add_argument("-c", "--config", default="config.yml", help="agent config file path")
-    args = parser.parse_args()
-
     app_process = start_process("app", [sys.executable, "app.py"])
-    agent_process = start_process("agent", [sys.executable, "main.py"], quiet=True)
-    processes = [("app", app_process), ("agent", agent_process)]
+    processes = [("app", app_process)]
+    agent_process = None
+    if agent_enabled():
+        agent_process = start_process("agent", [sys.executable, "main.py"], quiet=True, env=agent_env())
+        processes.append(("agent", agent_process))
+    else:
+        print("SERVER, CLIENT_SECRET, or UUID is empty; skip starting main.py", flush=True)
+
     stopping = False
 
     def stop(_signum, _frame) -> None:
@@ -61,11 +87,12 @@ def main() -> int:
                 stopping = True
                 break
 
-            agent_code = agent_process.poll()
-            if agent_code is not None and not agent_exit_reported:
-                agent_exit_reported = True
-                print(f"agent exited with code {agent_code}; app is still running", flush=True)
-                print("agent logs: /tmp/agent.log", flush=True)
+            if agent_process is not None:
+                agent_code = agent_process.poll()
+                if agent_code is not None and not agent_exit_reported:
+                    agent_exit_reported = True
+                    print(f"agent exited with code {agent_code}; app is still running", flush=True)
+                    print("agent logs: /tmp/agent.log", flush=True)
 
             time.sleep(1)
     finally:
