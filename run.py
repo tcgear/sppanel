@@ -53,15 +53,20 @@ def main() -> int:
     signal.signal(signal.SIGTERM, stop)
 
     try:
+        agent_exit_reported = False
         while not stopping:
-            for name, process in processes:
-                code = process.poll()
-                if code is not None:
-                    print(f"{name} exited with code {code}", flush=True)
-                    stopping = True
-                    break
-            if stopping:
+            app_code = app_process.poll()
+            if app_code is not None:
+                print(f"app exited with code {app_code}", flush=True)
+                stopping = True
                 break
+
+            agent_code = agent_process.poll()
+            if agent_code is not None and not agent_exit_reported:
+                agent_exit_reported = True
+                print(f"agent exited with code {agent_code}; app is still running", flush=True)
+                print("agent logs: /tmp/agent.log", flush=True)
+
             time.sleep(1)
     finally:
         for name, process in reversed(processes):
