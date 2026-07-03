@@ -13,7 +13,7 @@ BASE_DIR = Path(__file__).resolve().parent
 
 def start_process(name: str, args: list[str], quiet: bool = False) -> subprocess.Popen:
     if quiet:
-        log_path = BASE_DIR / f"{name}.log"
+        log_path = Path("/tmp") / f"{name}.log"
         log_file = log_path.open("ab")
         return subprocess.Popen(args, cwd=BASE_DIR, stdout=log_file, stderr=subprocess.STDOUT, start_new_session=True)
     print(f"Starting {name}: {' '.join(args)}", flush=True)
