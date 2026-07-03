@@ -39,7 +39,7 @@ def main() -> int:
     args = parser.parse_args()
 
     app_process = start_process("app", [sys.executable, "app.py"])
-    agent_process = start_process("agent", [sys.executable, "main.py", "-c", args.config], quiet=True)
+    agent_process = start_process("agent", [sys.executable, "main.py"], quiet=True)
     processes = [("app", app_process), ("agent", agent_process)]
     stopping = False
 
